@@ -1,4 +1,3 @@
-
 # HH Goa 2026 — Signal Frame
 
 Format A submission: upload a photo, get back a branded circular
@@ -69,6 +68,3 @@ Known gaps to close before submitting:
 - `test-render.png` in `/scripts` was the local proof-of-concept
   render used to validate the design before wiring it into the API
   route — not part of the deployed app.
-=======
-# HHGoa_Frame
-

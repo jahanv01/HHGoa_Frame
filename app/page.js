@@ -17,9 +17,9 @@ const STATUS_TEXT = {
 };
 
 const THEMES = [
-  { id: 'signal', label: 'SIGNAL', desc: 'Tuner dial + waveform' },
-  { id: 'postmark', label: 'POSTMARK', desc: 'Airmail stamp style' },
-  { id: 'playlist', label: 'PLAYLIST', desc: 'Vinyl record + tracklist' },
+  { id: 'radio', label: 'RADIO', desc: 'Illustrated beach + tuner' },
+  { id: 'postcard', label: 'POSTCARD', desc: 'Vintage stamp style' },
+  { id: 'map', label: 'MAP', desc: 'Treasure map style' },
 ];
 
 function Confetti() {
@@ -82,14 +82,39 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [dial, setDial] = useState(0);
-  const [theme, setTheme] = useState('signal');
+  const [theme, setTheme] = useState('radio');
   const [lowResWarning, setLowResWarning] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const inputRef = useRef(null);
 
   useEffect(() => {
     const t = setInterval(() => setDial((d) => (d + 1) % 1000), 80);
     return () => clearInterval(t);
   }, []);
+
+  // the image lives on a different origin (blob storage), so a plain
+  // <a download> is ignored by the browser and it navigates there instead —
+  // fetch it as a blob and save that, so the user never leaves this page
+  async function handleDownload() {
+    if (!result) return;
+    setDownloading(true);
+    try {
+      const res = await fetch(result.imageUrl);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = 'hh-goa-2026-frame.png';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      setErrorMsg('DOWNLOAD FAILED — TRY AGAIN');
+    } finally {
+      setDownloading(false);
+    }
+  }
 
   async function handleFile(file) {
     if (!file) return;
@@ -144,7 +169,15 @@ export default function Home() {
 
   const shareUrl =
     result && typeof window !== 'undefined' ? `${window.location.origin}${result.shareUrl}` : '';
-  const tweetText = encodeURIComponent("I'm building at Hacker House Goa 2026 🇮🇳 #FrameInGoa");
+  const TWEET_CAPTIONS = {
+    radio: "Locked onto Hacker House Goa 2026 📡🌴 Frequency's clear, signal's strong. #FrameInGoa",
+    postcard: "Greetings from Goa — building something this October 🌊✉️ #FrameInGoa",
+    map: "Charted my course to Hacker House Goa 2026 🗺️🏝️ #FrameInGoa",
+    signal: "Tuned in for Hacker House Goa 2026. Less noise, more signal. 📻 #FrameInGoa",
+    postmark: "Just got my Hacker House Goa 2026 stamp of approval ✉️🌴 #FrameInGoa",
+    playlist: "Now playing: Hacker House Goa 2026 🎵 Build. Ship. Repeat. #FrameInGoa",
+  };
+  const tweetText = encodeURIComponent(TWEET_CAPTIONS[theme] || TWEET_CAPTIONS.radio);
   const tweetUrl = result
     ? `https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`
     : '';
@@ -194,6 +227,8 @@ export default function Home() {
         }}
       >
         <div className="scanbeam" />
+
+        <div style={{ width: '100%', maxWidth: 480 }}>
 
         <div style={{ fontSize: 13, letterSpacing: 2, color: AMBER, marginBottom: 4 }}>
           HH GOA RADIO · EST. 2026
@@ -284,6 +319,12 @@ export default function Home() {
           </div>
         )}
 
+        {status !== 'done' && (
+          <p style={{ color: PINK, fontWeight: 700, letterSpacing: 1, marginBottom: 16 }}>
+            #FrameInGoa
+          </p>
+        )}
+
         {status === 'error' && (
           <p style={{ color: PINK, maxWidth: 320, fontSize: 13, letterSpacing: 1 }}>{errorMsg}</p>
         )}
@@ -315,22 +356,24 @@ export default function Home() {
             </div>
             <VUMeter active={false} />
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <a
-                href={result.imageUrl}
-                download="hh-goa-2026-frame.png"
+              <button
+                onClick={handleDownload}
+                disabled={downloading}
                 style={{
                   background: CREAM,
                   color: GREEN,
                   padding: '12px 20px',
                   borderRadius: 6,
                   fontWeight: 700,
-                  textDecoration: 'none',
+                  border: 'none',
                   letterSpacing: 1,
                   fontSize: 13,
+                  fontFamily: 'monospace',
+                  cursor: downloading ? 'default' : 'pointer',
                 }}
               >
-                ↓ DOWNLOAD
-              </a>
+                {downloading ? 'SAVING…' : '↓ DOWNLOAD'}
+              </button>
               <a
                 href={tweetUrl}
                 target="_blank"
@@ -370,6 +413,7 @@ export default function Home() {
             </button>
           </>
         )}
+        </div>
       </main>
     </>
   );

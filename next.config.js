@@ -2,6 +2,9 @@
 const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@napi-rs/canvas'],
+    outputFileTracingIncludes: {
+      '/api/generate': ['./public/frames/**'],
+    },
   },
   webpack: (config, { isServer }) => {
     if (isServer) {

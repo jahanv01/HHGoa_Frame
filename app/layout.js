@@ -3,6 +3,11 @@ export const metadata = {
   description: 'Turn your photo into an official Hacker House Goa 2026 signal frame.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
+
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
