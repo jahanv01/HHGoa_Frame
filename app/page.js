@@ -9,12 +9,20 @@ const GREEN_DARK = '#062a20';
 const AMBER = '#f2c53d';
 
 const STATUS_TEXT = {
-  idle: 'AWAITING SIGNAL',
-  converting: 'DECODING TRANSMISSION…',
-  generating: 'TUNING FREQUENCY…',
-  done: 'LOCKED — 106.2 FM',
-  error: 'SIGNAL LOST',
+  idle: 'READY TO BUILD',
+  converting: 'CONVERTING PHOTO…',
+  generating: 'GENERATING FRAME…',
+  done: 'FRAME READY',
+  error: 'SOMETHING WENT WRONG',
 };
+
+const IDLE_MESSAGES = [
+  'BREWING COFFEE…',
+  'PACKING THE LAPTOP…',
+  'WAXING THE SURFBOARD…',
+  'OPENING TERMINAL…',
+  'CATCHING THE BREEZE…',
+];
 
 const THEMES = [
   { id: 'radio', label: 'RADIO', desc: 'Illustrated beach + tuner' },
@@ -231,10 +239,13 @@ export default function Home() {
         <div style={{ width: '100%', maxWidth: 480 }}>
 
         <div style={{ fontSize: 13, letterSpacing: 2, color: AMBER, marginBottom: 4 }}>
-          HH GOA RADIO · EST. 2026
+          BUILD · SHIP · REPEAT · EST. 2026
         </div>
         <h1 style={{ fontSize: 26, margin: '4px 0', letterSpacing: 1 }}>HACKER HOUSE GOA</h1>
-        <p style={{ color: PINK, margin: '0 0 8px', fontWeight: 700, letterSpacing: 3 }}>2026</p>
+        <p style={{ color: PINK, margin: '0 0 4px', fontWeight: 700, letterSpacing: 3 }}>2026</p>
+        <p style={{ color: CREAM, margin: '0 0 8px', fontWeight: 700, letterSpacing: 2, fontSize: 13 }}>
+          FRAME GENERATOR
+        </p>
         <p style={{ fontSize: 11, color: CREAM, opacity: 0.6, margin: '0 0 24px' }}>
           LESS NOISE. MORE SIGNAL.
         </p>
@@ -251,7 +262,7 @@ export default function Home() {
             letterSpacing: 1,
           }}
         >
-          {status === 'idle' && `FREQ 10${(dial % 10)}.${dial % 10} MHz — SCANNING`}
+          {status === 'idle' && IDLE_MESSAGES[Math.floor(dial / 25) % IDLE_MESSAGES.length]}
           {status !== 'idle' && STATUS_TEXT[status]}
         </div>
 
