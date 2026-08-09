@@ -19,8 +19,41 @@ const STATUS_TEXT = {
 const THEMES = [
   { id: 'signal', label: 'SIGNAL', desc: 'Tuner dial + waveform' },
   { id: 'postmark', label: 'POSTMARK', desc: 'Airmail stamp style' },
-  { id: 'boarding', label: 'BOARDING', desc: 'Ticket / gate pass' },
+  { id: 'playlist', label: 'PLAYLIST', desc: 'Vinyl record + tracklist' },
 ];
+
+function Confetti() {
+  const colors = [CREAM, PINK, AMBER];
+  const pieces = new Array(40).fill(0).map((_, i) => ({
+    left: Math.random() * 100,
+    delay: Math.random() * 0.3,
+    duration: 1.6 + Math.random() * 0.9,
+    size: 6 + Math.random() * 6,
+    color: colors[i % colors.length],
+    rotate: Math.random() * 360,
+    drift: (Math.random() - 0.5) * 200,
+  }));
+  return (
+    <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      {pieces.map((p, i) => (
+        <div
+          key={i}
+          style={{
+            position: 'absolute',
+            top: -20,
+            left: `${p.left}%`,
+            width: p.size,
+            height: p.size * 0.5,
+            background: p.color,
+            transform: `rotate(${p.rotate}deg)`,
+            animation: `confetti-fall ${p.duration}s ease-in ${p.delay}s forwards`,
+            '--drift': `${p.drift}px`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
 
 function VUMeter({ active }) {
   const bars = new Array(12).fill(0);
@@ -124,6 +157,16 @@ export default function Home() {
         @keyframes vu { from { height: 4px; } to { height: 36px; } }
         @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.96} }
         @keyframes scan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100%)} }
+        @keyframes confetti-fall {
+          0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
+          100% { transform: translateY(700px) translateX(var(--drift)) rotate(540deg); opacity: 0; }
+        }
+        @keyframes pop-in {
+          0% { transform: scale(0.7); opacity: 0; }
+          60% { transform: scale(1.06); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        .result-pop { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
         .console { position:relative; overflow:hidden; }
         .console::before {
           content:''; position:absolute; inset:0; pointer-events:none;
@@ -253,7 +296,9 @@ export default function Home() {
 
         {status === 'done' && result && (
           <>
+            <Confetti />
             <div
+              className="result-pop"
               style={{
                 border: `3px solid ${AMBER}`,
                 borderRadius: 16,
