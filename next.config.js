@@ -3,6 +3,14 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['@napi-rs/canvas'],
   },
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals.push({
+        '@napi-rs/canvas': 'commonjs @napi-rs/canvas',
+      });
+    }
+    return config;
+  },
 };
 
 module.exports = nextConfig;
