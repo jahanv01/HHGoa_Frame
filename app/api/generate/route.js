@@ -5,36 +5,52 @@ import { renderFrame } from '../../../lib/renderFrame';
 export const runtime = 'nodejs';
 
 export async function POST(req) {
-  const form = await req.formData();
-  const file = form.get('photo');
-  if (!file) {
-    return Response.json({ error: 'No photo uploaded' }, { status: 400 });
-  }
-
-  const arrayBuffer = await file.arrayBuffer();
-  const photoBuffer = Buffer.from(arrayBuffer);
-
-  let pngBuffer;
   try {
-    pngBuffer = await renderFrame(photoBuffer);
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return Response.json(
+        { error: 'Server misconfigured: Blob store is not connected to this project.' },
+        { status: 500 }
+      );
+    }
+
+    const form = await req.formData();
+    const file = form.get('photo');
+    const theme = form.get('theme') || 'signal';
+    if (!file) {
+      return Response.json({ error: 'No photo uploaded' }, { status: 400 });
+    }
+
+    const arrayBuffer = await file.arrayBuffer();
+    const photoBuffer = Buffer.from(arrayBuffer);
+
+    let pngBuffer;
+    try {
+      pngBuffer = await renderFrame(photoBuffer, theme);
+    } catch (err) {
+      return Response.json(
+        { error: 'Could not read that image. Try a JPG or PNG.' },
+        { status: 400 }
+      );
+    }
+
+    const id = nanoid(10);
+
+    const blob = await put(`shares/${id}.png`, pngBuffer, {
+      access: 'public',
+      contentType: 'image/png',
+      addRandomSuffix: false,
+    });
+
+    return Response.json({
+      id,
+      imageUrl: blob.url,
+      shareUrl: `/s/${id}`,
+    });
   } catch (err) {
+    console.error('generate route failed:', err);
     return Response.json(
-      { error: 'Could not read that image. Try a JPG or PNG.' },
-      { status: 400 }
+      { error: err?.message || 'Unexpected server error' },
+      { status: 500 }
     );
   }
-
-  const id = nanoid(10);
-
-  const blob = await put(`shares/${id}.png`, pngBuffer, {
-    access: 'public',
-    contentType: 'image/png',
-    addRandomSuffix: false,
-  });
-
-  return Response.json({
-    id,
-    imageUrl: blob.url,
-    shareUrl: `/s/${id}`,
-  });
 }
