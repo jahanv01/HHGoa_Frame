@@ -218,6 +218,18 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
   const imgW = geo.iw * scaleFactorForRender;
   const imgH = geo.ih * scaleFactorForRender;
 
+  // The container's overflow:hidden only clips to the OUTER disc — it does
+  // not know about the frame artwork's actual inner hole. Any transparent
+  // or semi-transparent pixel in the ring artwork (there are plenty, in the
+  // swirl negative space) lets the photo show through past where it
+  // should be visible. Clip the photo itself to the true inner circle
+  // (same cx/cy/r the final canvas render uses) so the preview can't show
+  // photo anywhere the real export wouldn't.
+  const clipCx = frameMeta.cx * scaleFactorForRender;
+  const clipCy = frameMeta.cy * scaleFactorForRender;
+  const clipR = frameMeta.r * scaleFactorForRender;
+  const photoClipPath = `circle(${clipR}px at ${clipCx}px ${clipCy}px)`;
+
   return (
     <div style={{ width: '100%', maxWidth: 340, margin: '0 auto' }}>
       <div
@@ -247,6 +259,8 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
             maxWidth: 'none',
             userSelect: 'none',
             pointerEvents: 'none',
+            clipPath: photoClipPath,
+            WebkitClipPath: photoClipPath,
           }}
         />
         <img
