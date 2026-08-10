@@ -561,8 +561,35 @@ export default function Home() {
     return;
   }
 
-  setStatus('generating');
-  setErrorMsg('');
+  async function handleShare() {
+    if (!result?.blob) return;
+    setPreparingShare(true);
+    setErrorMsg('');
+    try {
+      let path = result.sharePath;
+      if (!path) {
+        // the share link needs a real public URL (for X's OG-image crawler
+        // to fetch), so this is the one place the server still gets
+        // involved — but only now, lazily, not while generating the
+        // preview. Uploaded directly from the browser to Blob storage.
+        const id = nanoid(10);
+        await upload(`shares/${id}.png`, result.blob, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-token',
+          addRandomSuffix: false,
+        });
+        path = `/s/${id}`;
+        setResult((r) => (r ? { ...r, sharePath: path } : r));
+      }
+      const fullShareUrl = `${window.location.origin}${path}`;
+      const tweetUrl = `https://x.com/intent/post?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`;
+      window.open(tweetUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
+    } finally {
+      setPreparingShare(false);
+    }
+  }
 
   try {
     // Generate the final frame locally
