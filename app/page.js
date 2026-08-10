@@ -63,7 +63,14 @@ function loadImageEl(src) {
 // trip (upload photo -> function -> composite -> upload result -> fetch
 // result back). The server is only involved later, and only for producing
 // a public shareable link, not for generating the image itself.
-async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom) {
+async function compositeFrameLocally(
+  photoUrl,
+  photoDims,
+  frameMeta,
+  offsetX,
+  offsetY,
+  zoom
+) {
   const [photoImg, frameImg] = await Promise.all([
     loadImageEl(photoUrl),
     loadImageEl('/frames/main.webp'),
@@ -72,24 +79,46 @@ async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, of
   const canvas = document.createElement('canvas');
   canvas.width = 1080;
   canvas.height = 1080;
+
   const ctx = canvas.getContext('2d');
+
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
 
   const geo = computeGeometry(photoDims, frameMeta, zoom);
+
   const clampedX = clamp(offsetX, -1, 1);
   const clampedY = clamp(offsetY, -1, 1);
+
   const drawX =
-  frameMeta.cx -
-  geo.iw / 2 +
-  clampedX * geo.maxOffsetX;
+    frameMeta.cx -
+    geo.iw / 2 +
+    clampedX * geo.maxOffsetX;
 
   const drawY =
     frameMeta.cy -
     geo.ih / 2 +
     clampedY * geo.maxOffsetY;
 
-  // Draw uploaded photo first
+  // ==========================================
+  // 1. Clip photo to frame's inner circle
+  // ==========================================
+  ctx.save();
+
+  ctx.beginPath();
+  ctx.arc(
+    frameMeta.cx,
+    frameMeta.cy,
+    frameMeta.r,
+    0,
+    Math.PI * 2
+  );
+
+  ctx.clip();
+
+  // ==========================================
+  // 2. Draw uploaded photo
+  // ==========================================
   ctx.drawImage(
     photoImg,
     drawX,
@@ -98,7 +127,11 @@ async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, of
     geo.ih
   );
 
-  // Draw frame artwork on top
+  ctx.restore();
+
+  // ==========================================
+  // 3. Draw frame on top
+  // ==========================================
   ctx.drawImage(
     frameImg,
     0,
@@ -107,9 +140,22 @@ async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, of
     1080
   );
 
+  // ==========================================
+  // 4. Convert canvas to PNG
+  // ==========================================
   const blob = await new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png')
+    canvas.toBlob(
+      (b) => {
+        if (b) {
+          resolve(b);
+        } else {
+          reject(new Error('toBlob failed'));
+        }
+      },
+      'image/png'
+    )
   );
+
   return blob;
 }
 
