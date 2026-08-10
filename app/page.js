@@ -411,7 +411,7 @@ export default function Home() {
   const [dial, setDial] = useState(0);
   const [lowResWarning, setLowResWarning] = useState(false);
   const [frameMeta, setFrameMeta] = useState(null);
-  const [preparingShare, setPreparingShare] = useState(false);
+  
 
   const [adjustFile, setAdjustFile] = useState(null);
   const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
@@ -557,91 +557,77 @@ export default function Home() {
   }
 
   async function handleConfirmAdjust() {
-    if (!adjustFile || !adjustPreviewUrl || !photoDims || !frameMeta) return;
-    setStatus('generating');
-    try {
-      // composite entirely in the browser — no upload, no server function,
-      // no network round trip. This is the whole speed fix: the previous
-      // version's slowness came from routing this through a serverless
-      // function when the browser's own Canvas API can do it directly.
-      const blob = await compositeFrameLocally(
-        adjustPreviewUrl, photoDims, frameMeta, offsetX, offsetY, zoom
-      );
-      const previewUrl = URL.createObjectURL(blob);
-      setResult({ blob, previewUrl, sharePath: null });
-      setStatus('done');
-    } catch (err) {
-      setStatus('error');
-      setErrorMsg("COULDN'T GENERATE THE FRAME — TRY AGAIN");
-    }
-  }
-
-  async function handleShare() {
-  if (!result?.blob) return;
-
-  setPreparingShare(true);
-  setErrorMsg('');
-
-  // Open the tab immediately from the user's click.
-  // This avoids the browser blocking the X popup after
-  // the image upload finishes.
-  const shareWindow = window.open('about:blank', '_blank');
-
-  if (!shareWindow) {
-    setPreparingShare(false);
-    setErrorMsg(
-      'PLEASE ALLOW POPUPS FOR THIS SITE TO SHARE TO X'
-    );
+  if (!adjustFile || !adjustPreviewUrl || !photoDims || !frameMeta) {
     return;
   }
 
+  setStatus('generating');
+  setErrorMsg('');
+
   try {
-    let path = result.sharePath;
+    // Generate the final frame locally
+    const blob = await compositeFrameLocally(
+      adjustPreviewUrl,
+      photoDims,
+      frameMeta,
+      offsetX,
+      offsetY,
+      zoom
+    );
 
-    // Upload the generated frame only if it hasn't
-    // already been uploaded.
-    if (!path) {
-      const id = nanoid(10);
+    // Create local preview immediately
+    const previewUrl = URL.createObjectURL(blob);
 
-      await upload(`shares/${id}.png`, result.blob, {
-        access: 'public',
-        handleUploadUrl: '/api/upload-token',
-        addRandomSuffix: false,
-      });
+    // Upload the generated frame now so the share URL
+    // already exists before the user clicks "Broadcast to X".
+    const id = nanoid(10);
 
-      path = `/s/${id}`;
+    await upload(`shares/${id}.png`, blob, {
+      access: 'public',
+      handleUploadUrl: '/api/upload-token',
+      addRandomSuffix: false,
+    });
 
-      setResult((r) =>
-        r ? { ...r, sharePath: path } : r
-      );
-    }
+    const sharePath = `/s/${id}`;
 
-    const fullShareUrl =
-      `${window.location.origin}${path}`;
+    setResult({
+      blob,
+      previewUrl,
+      sharePath,
+    });
 
-    const tweetUrl =
-      `https://x.com/intent/post` +
-      `?text=${encodeURIComponent(TWEET_CAPTION)}` +
-      `&url=${encodeURIComponent(fullShareUrl)}`;
-
-    // Redirect the tab that was opened immediately
-    // from the user's click.
-    shareWindow.location.href = tweetUrl;
+    setStatus('done');
 
   } catch (err) {
-    console.error('Share failed:', err);
+    console.error('Frame generation/share upload failed:', err);
 
-    shareWindow.close();
-
+    setStatus('error');
     setErrorMsg(
-      'COULD NOT PREPARE SHARE LINK — TRY AGAIN'
+      "COULDN'T GENERATE THE FRAME — TRY AGAIN"
     );
-  } finally {
-    setPreparingShare(false);
   }
 }
 
-  const busy = status === 'converting' || status === 'generating';
+  const shareUrl =
+  result?.sharePath && typeof window !== 'undefined'
+    ? `${window.location.origin}${result.sharePath}`
+    : '';
+
+  const tweetText = result?.sharePath
+    ? encodeURIComponent(
+        `${TWEET_CAPTION}\n\n${shareUrl}`
+      )
+    : '';
+
+  const tweetUrl = result?.sharePath
+    ? `https://x.com/intent/post?text=${tweetText}`
+    : '';
+
+  const busy =
+    status === 'converting' ||
+    status === 'generating';  
+
+  
 
   return (
     <>
@@ -868,24 +854,28 @@ export default function Home() {
               >
                 ↓ DOWNLOAD
               </button>
-              <button
-                onClick={handleShare}
-                disabled={preparingShare}
-                style={{
-                  background: PINK,
-                  color: CREAM,
-                  padding: '12px 20px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  border: 'none',
-                  letterSpacing: 1,
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  cursor: preparingShare ? 'default' : 'pointer',
-                }}
-              >
-                {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
-              </button>
+              {tweetUrl && (
+                <a
+                  href={tweetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: PINK,
+                    color: CREAM,
+                    padding: '12px 20px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    letterSpacing: 1,
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    display: 'inline-block',
+                    cursor: 'pointer',
+                  }}
+                >
+                  BROADCAST TO X
+                </a>
+              )}
             </div>
           </>
         )}
