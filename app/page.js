@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { upload } from '@vercel/blob/client';
+import { nanoid } from 'nanoid';
 
 const CREAM = '#f4ecd8';
 const PINK = '#e8477a';
@@ -11,6 +13,7 @@ const AMBER = '#f2c53d';
 const STATUS_TEXT = {
   idle: 'READY TO BUILD',
   converting: 'CONVERTING PHOTO…',
+  adjusting: 'DRAG TO ADJUST',
   generating: 'GENERATING FRAME…',
   done: 'FRAME READY',
   error: 'SOMETHING WENT WRONG',
@@ -26,6 +29,73 @@ const IDLE_MESSAGES = [
 
 const TWEET_CAPTION =
   "Locked in at Hacker House Goa 2026 🌴💻 Building something this October. #FrameInGoa";
+
+const DEFAULT_OFFSET_Y = 0.35; // matches server's DEFAULT_Y_BIAS
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
+}
+
+// Mirrors the server's compositing math exactly (lib/renderFrame.js) so the
+// adjuster preview is a true WYSIWYG of the final generated image.
+function computeGeometry(photoDims, frameMeta, zoom) {
+  const baseScale = Math.max((frameMeta.r * 2) / photoDims.w, (frameMeta.r * 2) / photoDims.h);
+  const scale = baseScale * zoom;
+  const iw = photoDims.w * scale;
+  const ih = photoDims.h * scale;
+  const maxOffsetX = Math.max(0, (iw - frameMeta.r * 2) / 2);
+  const maxOffsetY = Math.max(0, (ih - frameMeta.r * 2) / 2);
+  return { scale, iw, ih, maxOffsetX, maxOffsetY };
+}
+
+function loadImageEl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+// Same operation as lib/renderFrame.js's renderFrame(), but running in the
+// browser's own Canvas API instead of a serverless function — this is what
+// makes the result appear instantly instead of waiting on a network round
+// trip (upload photo -> function -> composite -> upload result -> fetch
+// result back). The server is only involved later, and only for producing
+// a public shareable link, not for generating the image itself.
+async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom) {
+  const [photoImg, frameImg] = await Promise.all([
+    loadImageEl(photoUrl),
+    loadImageEl('/frames/main.webp'),
+  ]);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
+
+  const geo = computeGeometry(photoDims, frameMeta, zoom);
+  const clampedX = clamp(offsetX, -1, 1);
+  const clampedY = clamp(offsetY, -1, 1);
+  const drawX = frameMeta.cx - geo.iw / 2 + clampedX * geo.maxOffsetX;
+  const drawY = frameMeta.cy - geo.ih / 2 + clampedY * geo.maxOffsetY;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(frameMeta.cx, frameMeta.cy, frameMeta.r, 0, Math.PI * 2);
+  ctx.clip();
+  ctx.drawImage(photoImg, drawX, drawY, geo.iw, geo.ih);
+  ctx.restore();
+
+  ctx.drawImage(frameImg, 0, 0, 1080, 1080);
+
+  const blob = await new Promise((resolve, reject) =>
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png')
+  );
+  return blob;
+}
 
 function Confetti() {
   const colors = [CREAM, PINK, AMBER];
@@ -82,13 +152,166 @@ function VUMeter({ active }) {
   );
 }
 
+function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, onChangeOffset, onChangeZoom, onConfirm, onCancel }) {
+  const containerRef = useRef(null);
+  const dragRef = useRef({ active: false });
+
+  useEffect(() => {
+    function handlePointerMove(e) {
+      const d = dragRef.current;
+      if (!d.active) return;
+      const dxCanvas = (e.clientX - d.startClientX) / d.scaleFactor;
+      const dyCanvas = (e.clientY - d.startClientY) / d.scaleFactor;
+      const newX = d.maxOffsetX > 0 ? clamp(d.startOffsetX + dxCanvas / d.maxOffsetX, -1, 1) : 0;
+      const newY = d.maxOffsetY > 0 ? clamp(d.startOffsetY + dyCanvas / d.maxOffsetY, -1, 1) : 0;
+      onChangeOffset(newX, newY);
+    }
+    function handlePointerUp() {
+      dragRef.current.active = false;
+    }
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [onChangeOffset]);
+
+  function handlePointerDown(e) {
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const scaleFactor = rect.width / 1080;
+    const geo = computeGeometry(photoDims, frameMeta, zoom);
+    dragRef.current = {
+      active: true,
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startOffsetX: offsetX,
+      startOffsetY: offsetY,
+      maxOffsetX: geo.maxOffsetX,
+      maxOffsetY: geo.maxOffsetY,
+      scaleFactor,
+    };
+  }
+
+  const geo = computeGeometry(photoDims, frameMeta, zoom);
+  const scaleFactorForRender = 340 / 1080; // matches the container's maxWidth
+  const imgLeft = (frameMeta.cx - geo.iw / 2 + offsetX * geo.maxOffsetX) * scaleFactorForRender;
+  const imgTop = (frameMeta.cy - geo.ih / 2 + offsetY * geo.maxOffsetY) * scaleFactorForRender;
+  const imgW = geo.iw * scaleFactorForRender;
+  const imgH = geo.ih * scaleFactorForRender;
+
+  return (
+    <div style={{ width: '100%', maxWidth: 340, margin: '0 auto' }}>
+      <div
+        ref={containerRef}
+        onPointerDown={handlePointerDown}
+        style={{
+          position: 'relative',
+          width: '100%',
+          aspectRatio: '1',
+          borderRadius: '50%',
+          overflow: 'hidden',
+          touchAction: 'none',
+          cursor: 'grab',
+          background: '#000',
+        }}
+      >
+        <img
+          src={photoUrl}
+          alt="Drag to reposition"
+          draggable={false}
+          style={{
+            position: 'absolute',
+            left: imgLeft,
+            top: imgTop,
+            width: imgW,
+            height: imgH,
+            maxWidth: 'none',
+            userSelect: 'none',
+            pointerEvents: 'none',
+          }}
+        />
+        <img
+          src="/frames/main.webp"
+          alt=""
+          draggable={false}
+          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+        />
+      </div>
+
+      <p style={{ fontSize: 11, color: CREAM, opacity: 0.7, margin: '10px 0 4px' }}>
+        DRAG PHOTO TO REPOSITION
+      </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '8px 0 16px' }}>
+        <span style={{ fontSize: 11, color: CREAM, opacity: 0.7 }}>ZOOM</span>
+        <input
+          type="range"
+          min="1"
+          max="2.5"
+          step="0.05"
+          value={zoom}
+          onChange={(e) => onChangeZoom(parseFloat(e.target.value))}
+          style={{ flex: 1, accentColor: AMBER }}
+        />
+      </div>
+
+      <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'transparent',
+            color: CREAM,
+            border: `1px solid ${CREAM}`,
+            padding: '12px 18px',
+            borderRadius: 6,
+            fontFamily: 'monospace',
+            fontSize: 12,
+            letterSpacing: 1,
+            cursor: 'pointer',
+          }}
+        >
+          CHOOSE DIFFERENT
+        </button>
+        <button
+          onClick={onConfirm}
+          style={{
+            background: AMBER,
+            color: GREEN,
+            border: 'none',
+            padding: '12px 18px',
+            borderRadius: 6,
+            fontWeight: 700,
+            fontFamily: 'monospace',
+            fontSize: 12,
+            letterSpacing: 1,
+            cursor: 'pointer',
+          }}
+        >
+          USE THIS PHOTO →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const [status, setStatus] = useState('idle');
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [dial, setDial] = useState(0);
   const [lowResWarning, setLowResWarning] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [frameMeta, setFrameMeta] = useState(null);
+  const [preparingShare, setPreparingShare] = useState(false);
+
+  const [adjustFile, setAdjustFile] = useState(null);
+  const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
+  const [photoDims, setPhotoDims] = useState(null);
+  const [offsetX, setOffsetX] = useState(0);
+  const [offsetY, setOffsetY] = useState(DEFAULT_OFFSET_Y);
+  const [zoom, setZoom] = useState(1);
+
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -96,25 +319,40 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
 
-  async function handleDownload() {
-    if (!result) return;
-    setDownloading(true);
-    try {
-      const res = await fetch(result.imageUrl);
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = 'hh-goa-2026-frame.png';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    } catch (err) {
-      setErrorMsg('DOWNLOAD FAILED — TRY AGAIN');
-    } finally {
-      setDownloading(false);
-    }
+  useEffect(() => {
+    fetch('/frames/main-meta.json')
+      .then((r) => r.json())
+      .then(setFrameMeta)
+      .catch(() => {});
+  }, []);
+
+  function resetToIdle() {
+    setStatus('idle');
+    if (result?.previewUrl) URL.revokeObjectURL(result.previewUrl);
+    setResult(null);
+    setAdjustFile(null);
+    if (adjustPreviewUrl) URL.revokeObjectURL(adjustPreviewUrl);
+    setAdjustPreviewUrl(null);
+    setPhotoDims(null);
+    setOffsetX(0);
+    setOffsetY(DEFAULT_OFFSET_Y);
+    setZoom(1);
+    setErrorMsg('');
+    setLowResWarning(false);
+  }
+
+  function handleDownload() {
+    if (!result?.blob) return;
+    // the composited image already exists locally as a Blob — no fetch,
+    // no server round trip, just save it
+    const blobUrl = URL.createObjectURL(result.blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = 'hh-goa-2026-frame.png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(blobUrl);
   }
 
   async function handleFile(file) {
@@ -138,39 +376,116 @@ export default function Home() {
       }
     }
 
+    let sourceImg;
     try {
-      const dims = await new Promise((resolve, reject) => {
+      sourceImg = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = URL.createObjectURL(toUpload);
+      });
+      const dims = { w: sourceImg.naturalWidth, h: sourceImg.naturalHeight };
+      if (Math.min(dims.w, dims.h) < 500) setLowResWarning(true);
+
+      const MAX_DIM = 1600;
+      const TARGET_BYTES = 2 * 1024 * 1024;
+      let targetDim = Math.min(MAX_DIM, Math.max(dims.w, dims.h));
+      let quality = 0.88;
+      let finalBlob = null;
+
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const scale = targetDim / Math.max(dims.w, dims.h);
+        const targetW = Math.round(dims.w * scale);
+        const targetH = Math.round(dims.h * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = targetW;
+        canvas.height = targetH;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(sourceImg, 0, 0, targetW, targetH);
+        const blob = await new Promise((resolve, reject) =>
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/jpeg', quality)
+        );
+        finalBlob = blob;
+        if (blob.size <= TARGET_BYTES) break;
+        targetDim = Math.round(targetDim * 0.8);
+        quality = Math.max(0.5, quality - 0.12);
+      }
+
+      if (finalBlob) {
+        toUpload = new File([finalBlob], 'photo.jpg', { type: 'image/jpeg' });
+      }
+
+      // measure the FINAL (possibly resized) image, since that's what the
+      // adjuster and the server both actually operate on
+      const finalDims = await new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
         img.onerror = reject;
         img.src = URL.createObjectURL(toUpload);
       });
-      if (Math.min(dims.w, dims.h) < 500) setLowResWarning(true);
-    } catch {
-      // non-fatal
-    }
 
-    setStatus('generating');
-    try {
-      const fd = new FormData();
-      fd.append('photo', toUpload);
-      const res = await fetch('/api/generate', { method: 'POST', body: fd });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Something went wrong');
-      setResult(data);
-      setStatus('done');
+      setAdjustFile(toUpload);
+      setAdjustPreviewUrl(URL.createObjectURL(toUpload));
+      setPhotoDims(finalDims);
+      setOffsetX(0);
+      setOffsetY(DEFAULT_OFFSET_Y);
+      setZoom(1);
+      setStatus('adjusting');
     } catch (err) {
       setStatus('error');
-      setErrorMsg((err.message || 'SOMETHING WENT WRONG').toUpperCase());
+      setErrorMsg("COULDN'T READ THAT PHOTO — TRY ANOTHER");
     }
   }
 
-  const shareUrl =
-    result && typeof window !== 'undefined' ? `${window.location.origin}${result.shareUrl}` : '';
-  const tweetText = encodeURIComponent(TWEET_CAPTION);
-  const tweetUrl = result
-    ? `https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`
-    : '';
+  async function handleConfirmAdjust() {
+    if (!adjustFile || !adjustPreviewUrl || !photoDims || !frameMeta) return;
+    setStatus('generating');
+    try {
+      // composite entirely in the browser — no upload, no server function,
+      // no network round trip. This is the whole speed fix: the previous
+      // version's slowness came from routing this through a serverless
+      // function when the browser's own Canvas API can do it directly.
+      const blob = await compositeFrameLocally(
+        adjustPreviewUrl, photoDims, frameMeta, offsetX, offsetY, zoom
+      );
+      const previewUrl = URL.createObjectURL(blob);
+      setResult({ blob, previewUrl, sharePath: null });
+      setStatus('done');
+    } catch (err) {
+      setStatus('error');
+      setErrorMsg("COULDN'T GENERATE THE FRAME — TRY AGAIN");
+    }
+  }
+
+  async function handleShare() {
+    if (!result?.blob) return;
+    setPreparingShare(true);
+    setErrorMsg('');
+    try {
+      let path = result.sharePath;
+      if (!path) {
+        // the share link needs a real public URL (for X's OG-image crawler
+        // to fetch), so this is the one place the server still gets
+        // involved — but only now, lazily, not while generating the
+        // preview. Uploaded directly from the browser to Blob storage.
+        const id = nanoid(10);
+        await upload(`shares/${id}.png`, result.blob, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-token',
+          addRandomSuffix: false,
+        });
+        path = `/s/${id}`;
+        setResult((r) => (r ? { ...r, sharePath: path } : r));
+      }
+      const fullShareUrl = `${window.location.origin}${path}`;
+      const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`;
+      window.open(tweetUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
+    } finally {
+      setPreparingShare(false);
+    }
+  }
 
   const busy = status === 'converting' || status === 'generating';
 
@@ -260,7 +575,7 @@ export default function Home() {
           {status !== 'idle' && STATUS_TEXT[status]}
         </div>
 
-        {status !== 'done' && (
+        {(status === 'idle' || status === 'converting') && (
           <div
             onClick={() => !busy && inputRef.current?.click()}
             style={{
@@ -295,7 +610,39 @@ export default function Home() {
           </div>
         )}
 
-        {status !== 'done' && (
+        {status === 'adjusting' && frameMeta && photoDims && adjustPreviewUrl && (
+          <AdjustPanel
+            photoUrl={adjustPreviewUrl}
+            photoDims={photoDims}
+            frameMeta={frameMeta}
+            offsetX={offsetX}
+            offsetY={offsetY}
+            zoom={zoom}
+            onChangeOffset={(x, y) => { setOffsetX(x); setOffsetY(y); }}
+            onChangeZoom={setZoom}
+            onConfirm={handleConfirmAdjust}
+            onCancel={resetToIdle}
+          />
+        )}
+
+        {status === 'generating' && (
+          <div style={{ width: '100%', maxWidth: 340, aspectRatio: '1', margin: '0 auto 12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <VUMeter active />
+          </div>
+        )}
+
+        {(status === 'idle' || status === 'converting') && (
+          <>
+            <p style={{ fontSize: 11, color: CREAM, opacity: 0.6, margin: '0 0 4px' }}>
+              JPG · PNG · HEIC · WEBP
+            </p>
+            <p style={{ fontSize: 11, color: AMBER, fontWeight: 700, letterSpacing: 1, margin: '0 0 16px' }}>
+              ANY SHAPE — WE'LL FRAME IT
+            </p>
+          </>
+        )}
+
+        {(status === 'idle' || status === 'converting') && (
           <p style={{ color: PINK, fontWeight: 700, letterSpacing: 1, marginBottom: 16 }}>
             #FrameInGoa
           </p>
@@ -305,7 +652,7 @@ export default function Home() {
           <p style={{ color: PINK, maxWidth: 320, fontSize: 13, letterSpacing: 1, margin: '0 auto 16px' }}>{errorMsg}</p>
         )}
 
-        {lowResWarning && (status === 'generating' || status === 'done') && (
+        {lowResWarning && (status === 'adjusting' || status === 'generating' || status === 'done') && (
           <p style={{ color: AMBER, maxWidth: 320, fontSize: 12, letterSpacing: 0.5, margin: '0 auto 12px' }}>
             HEADS UP: THAT PHOTO IS LOW RESOLUTION — RESULT MAY LOOK SOFT
           </p>
@@ -319,20 +666,38 @@ export default function Home() {
               style={{
                 width: '100%',
                 maxWidth: 340,
-                margin: '0 auto 20px',
+                margin: '0 auto 16px',
               }}
             >
               <img
-                src={result.imageUrl}
+                src={result.previewUrl}
                 alt="Your Hacker House Goa 2026 frame"
                 style={{ width: '100%', height: 'auto', display: 'block' }}
               />
             </div>
+
+            <button
+              onClick={resetToIdle}
+              style={{
+                background: 'transparent',
+                color: CREAM,
+                border: `1px solid ${CREAM}`,
+                padding: '8px 14px',
+                borderRadius: 6,
+                fontFamily: 'monospace',
+                fontSize: 11,
+                letterSpacing: 1,
+                cursor: 'pointer',
+                marginBottom: 16,
+              }}
+            >
+              ⟲ CHANGE PHOTO
+            </button>
+
             <VUMeter active={false} />
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
               <button
                 onClick={handleDownload}
-                disabled={downloading}
                 style={{
                   background: CREAM,
                   color: GREEN,
@@ -343,48 +708,30 @@ export default function Home() {
                   letterSpacing: 1,
                   fontSize: 13,
                   fontFamily: 'monospace',
-                  cursor: downloading ? 'default' : 'pointer',
+                  cursor: 'pointer',
                 }}
               >
-                {downloading ? 'SAVING…' : '↓ DOWNLOAD'}
+                ↓ DOWNLOAD
               </button>
-              <a
-                href={tweetUrl}
-                target="_blank"
-                rel="noreferrer"
+              <button
+                onClick={handleShare}
+                disabled={preparingShare}
                 style={{
                   background: PINK,
                   color: CREAM,
                   padding: '12px 20px',
                   borderRadius: 6,
                   fontWeight: 700,
-                  textDecoration: 'none',
+                  border: 'none',
                   letterSpacing: 1,
                   fontSize: 13,
+                  fontFamily: 'monospace',
+                  cursor: preparingShare ? 'default' : 'pointer',
                 }}
               >
-                BROADCAST TO X
-              </a>
+                {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
+              </button>
             </div>
-            <button
-              onClick={() => {
-                setStatus('idle');
-                setResult(null);
-              }}
-              style={{
-                marginTop: 20,
-                background: 'transparent',
-                color: CREAM,
-                border: `1px solid ${CREAM}`,
-                padding: '10px 16px',
-                borderRadius: 6,
-                fontFamily: 'monospace',
-                fontSize: 12,
-                letterSpacing: 1,
-              }}
-            >
-              ⟲ RETUNE
-            </button>
           </>
         )}
         </div>
