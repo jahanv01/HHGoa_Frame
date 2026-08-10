@@ -583,9 +583,8 @@ export default function Home() {
     const id = nanoid(10);
 
     await upload(`shares/${id}.png`, blob, {
-      access: 'public',
-      handleUploadUrl: '/api/upload-token',
-      addRandomSuffix: false,
+    access: 'public',
+    handleUploadUrl: '/api/upload-token',
     });
 
     const sharePath = `/s/${id}`;
