@@ -584,7 +584,6 @@ export default function Home() {
         await upload(`shares/${id}.png`, result.blob, {
           access: 'public',
           handleUploadUrl: '/api/upload-token',
-          addRandomSuffix: false,
         });
         path = `/s/${id}`;
         setResult((r) => (r ? { ...r, sharePath: path } : r));
