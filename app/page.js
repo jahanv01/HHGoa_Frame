@@ -82,12 +82,7 @@ async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, of
   const drawX = frameMeta.cx - geo.iw / 2 + clampedX * geo.maxOffsetX;
   const drawY = frameMeta.cy - geo.ih / 2 + clampedY * geo.maxOffsetY;
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(frameMeta.cx, frameMeta.cy, frameMeta.r, 0, Math.PI * 2);
-  ctx.clip();
-  ctx.drawImage(photoImg, drawX, drawY, geo.iw, geo.ih);
-  ctx.restore();
+
 
   ctx.drawImage(frameImg, 0, 0, 1080, 1080);
 
@@ -218,32 +213,32 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
   const imgW = geo.iw * scaleFactorForRender;
   const imgH = geo.ih * scaleFactorForRender;
 
-  // The container's overflow:hidden only clips to the OUTER disc — it does
-  // not know about the frame artwork's actual inner hole. Any transparent
-  // or semi-transparent pixel in the ring artwork (there are plenty, in the
-  // swirl negative space) lets the photo show through past where it
-  // should be visible. Clip the photo itself to the true inner circle
-  // (same cx/cy/r the final canvas render uses) so the preview can't show
-  // photo anywhere the real export wouldn't.
-  const clipCx = frameMeta.cx * scaleFactorForRender;
-  const clipCy = frameMeta.cy * scaleFactorForRender;
-  const clipR = frameMeta.r * scaleFactorForRender;
-  const photoClipPath = `circle(${clipR}px at ${clipCx}px ${clipCy}px)`;
 
   return (
     <div style={{ width: '100%', maxWidth: 340, margin: '0 auto' }}>
+    <div
+      ref={containerRef}
+      onPointerDown={handlePointerDown}
+      style={{
+        position: 'relative',
+        width: '100%',
+        aspectRatio: '1',
+        overflow: 'hidden',
+        touchAction: 'none',
+        cursor: 'grab',
+        background: '#000',
+      }}
+    >
+      {/* PHOTO WINDOW */}
       <div
-        ref={containerRef}
-        onPointerDown={handlePointerDown}
         style={{
-          position: 'relative',
-          width: '100%',
-          aspectRatio: '1',
+          position: 'absolute',
+          left: `${(frameMeta.cx - frameMeta.r) * scaleFactorForRender}px`,
+          top: `${(frameMeta.cy - frameMeta.r) * scaleFactorForRender}px`,
+          width: `${frameMeta.r * 2 * scaleFactorForRender}px`,
+          height: `${frameMeta.r * 2 * scaleFactorForRender}px`,
           borderRadius: '50%',
           overflow: 'hidden',
-          touchAction: 'none',
-          cursor: 'grab',
-          background: '#000',
         }}
       >
         <img
@@ -252,24 +247,39 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
           draggable={false}
           style={{
             position: 'absolute',
-            left: imgLeft,
-            top: imgTop,
-            width: imgW,
-            height: imgH,
+
+            /*
+            * Convert the photo's 1080x1080 canvas position
+            * into coordinates relative to the circular
+            * photo window.
+            */
+            left: `${(imgLeft - (frameMeta.cx - frameMeta.r) * scaleFactorForRender)}px`,
+            top: `${(imgTop - (frameMeta.cy - frameMeta.r) * scaleFactorForRender)}px`,
+
+            width: `${imgW}px`,
+            height: `${imgH}px`,
+
             maxWidth: 'none',
             userSelect: 'none',
             pointerEvents: 'none',
-            clipPath: photoClipPath,
-            WebkitClipPath: photoClipPath,
           }}
         />
-        <img
-          src="/frames/main.webp"
-          alt=""
-          draggable={false}
-          style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
-        />
       </div>
+
+      {/* FRAME */}
+      <img
+        src="/frames/main.webp"
+        alt=""
+        draggable={false}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
 
       <p style={{ fontSize: 11, color: CREAM, opacity: 0.7, margin: '10px 0 4px' }}>
         DRAG PHOTO TO REPOSITION
