@@ -577,6 +577,10 @@ export default function Home() {
     setErrorMsg('');
     // open tab synchronously before any await so popup blockers don't fire
     const win = window.open('', '_blank');
+    if (win) {
+      win.document.write('<html><body style="background:#062a20;color:#f2c53d;font-family:monospace;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-size:14px;letter-spacing:2px;">PREPARING SHARE LINK…</body></html>');
+      win.document.close();
+    }
     try {
       let path = result.sharePath;
       if (!path) {
