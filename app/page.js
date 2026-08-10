@@ -411,8 +411,7 @@ export default function Home() {
   const [dial, setDial] = useState(0);
   const [lowResWarning, setLowResWarning] = useState(false);
   const [frameMeta, setFrameMeta] = useState(null);
-
-  const [adjustFile, setAdjustFile] = useState(null);
+  const [preparingShare, setPreparingShare] = useState(false);
   const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
   const [photoDims, setPhotoDims] = useState(null);
   const [offsetX, setOffsetX] = useState(0);
@@ -563,14 +562,7 @@ export default function Home() {
         adjustPreviewUrl, photoDims, frameMeta, offsetX, offsetY, zoom
       );
       const previewUrl = URL.createObjectURL(blob);
-      // upload eagerly so the share link is ready the moment the frame appears
-      const id = nanoid(10);
-      await upload(`shares/${id}.png`, blob, {
-        access: 'public',
-        handleUploadUrl: '/api/upload-token',
-      });
-      const sharePath = `/s/${id}`;
-      setResult({ blob, previewUrl, sharePath });
+      setResult({ blob, previewUrl, sharePath: null });
       setStatus('done');
     } catch (err) {
       setStatus('error');
@@ -578,16 +570,35 @@ export default function Home() {
     }
   }
 
-  const shareUrl =
-    result?.sharePath && typeof window !== 'undefined'
-      ? `${window.location.origin}${result.sharePath}`
-      : '';
-  const tweetText = result?.sharePath
-    ? encodeURIComponent(`${TWEET_CAPTION}\n\n${shareUrl}`)
-    : '';
-  const tweetUrl = result?.sharePath
-    ? `https://x.com/intent/post?text=${tweetText}`
-    : '';
+  async function handleShare() {
+    if (!result?.blob) return;
+    setPreparingShare(true);
+    setErrorMsg('');
+    // open the window synchronously (inside the click handler) so popup
+    // blockers don't fire — then redirect it once the upload finishes
+    const win = window.open('', '_blank', 'noopener,noreferrer');
+    try {
+      let path = result.sharePath;
+      if (!path) {
+        const id = nanoid(10);
+        await upload(`shares/${id}.png`, result.blob, {
+          access: 'public',
+          handleUploadUrl: '/api/upload-token',
+          addRandomSuffix: false,
+        });
+        path = `/s/${id}`;
+        setResult((r) => (r ? { ...r, sharePath: path } : r));
+      }
+      const fullShareUrl = `${window.location.origin}${path}`;
+      const tweetUrl = `https://x.com/intent/post?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`;
+      if (win) win.location.href = tweetUrl;
+    } catch (err) {
+      if (win) win.close();
+      setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
+    } finally {
+      setPreparingShare(false);
+    }
+  }
 
   const busy = status === 'converting' || status === 'generating';
 
@@ -816,28 +827,24 @@ export default function Home() {
               >
                 ↓ DOWNLOAD
               </button>
-              {tweetUrl && (
-                <a
-                  href={tweetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    background: PINK,
-                    color: CREAM,
-                    padding: '12px 20px',
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    letterSpacing: 1,
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    display: 'inline-block',
-                    cursor: 'pointer',
-                  }}
-                >
-                  BROADCAST TO X
-                </a>
-              )}
+              <button
+                onClick={handleShare}
+                disabled={preparingShare}
+                style={{
+                  background: PINK,
+                  color: CREAM,
+                  padding: '12px 20px',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  border: 'none',
+                  letterSpacing: 1,
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  cursor: preparingShare ? 'default' : 'pointer',
+                }}
+              >
+                {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
+              </button>
             </div>
           </>
         )}
