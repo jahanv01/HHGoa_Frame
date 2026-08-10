@@ -592,7 +592,7 @@ export default function Home() {
       const fullShareUrl = `${window.location.origin}${path}`;
       setTweetUrl(`https://x.com/intent/post?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`);
     } catch (err) {
-      setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
+      setErrorMsg(`SHARE FAILED: ${err?.message || err}`);
     } finally {
       setPreparingShare(false);
     }
