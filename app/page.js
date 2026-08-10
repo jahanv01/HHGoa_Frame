@@ -412,6 +412,7 @@ export default function Home() {
   const [lowResWarning, setLowResWarning] = useState(false);
   const [frameMeta, setFrameMeta] = useState(null);
   const [preparingShare, setPreparingShare] = useState(false);
+  const [adjustFile, setAdjustFile] = useState(null);
   const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
   const [photoDims, setPhotoDims] = useState(null);
   const [offsetX, setOffsetX] = useState(0);
