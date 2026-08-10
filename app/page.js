@@ -28,7 +28,7 @@ const IDLE_MESSAGES = [
 ];
 
 const TWEET_CAPTION =
-  "Locked in at Hacker House Goa 2026 🌴💻 Building something this October. #FrameInGoa";
+  "Goa, code, and a little chaos 🌴💻 Just framed my Hacker House Goa 2026 moment. Less noise. More signal. #FrameInGoa";
 
 const DEFAULT_OFFSET_Y = 0.35; // matches server's DEFAULT_Y_BIAS
 
@@ -577,34 +577,69 @@ export default function Home() {
   }
 
   async function handleShare() {
-    if (!result?.blob) return;
-    setPreparingShare(true);
-    setErrorMsg('');
-    try {
-      let path = result.sharePath;
-      if (!path) {
-        // the share link needs a real public URL (for X's OG-image crawler
-        // to fetch), so this is the one place the server still gets
-        // involved — but only now, lazily, not while generating the
-        // preview. Uploaded directly from the browser to Blob storage.
-        const id = nanoid(10);
-        await upload(`shares/${id}.png`, result.blob, {
-          access: 'public',
-          handleUploadUrl: '/api/upload-token',
-          addRandomSuffix: false,
-        });
-        path = `/s/${id}`;
-        setResult((r) => (r ? { ...r, sharePath: path } : r));
-      }
-      const fullShareUrl = `${window.location.origin}${path}`;
-      const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`;
-      window.open(tweetUrl, '_blank', 'noopener,noreferrer');
-    } catch (err) {
-      setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
-    } finally {
-      setPreparingShare(false);
-    }
+  if (!result?.blob) return;
+
+  setPreparingShare(true);
+  setErrorMsg('');
+
+  // Open the tab immediately from the user's click.
+  // This avoids the browser blocking the X popup after
+  // the image upload finishes.
+  const shareWindow = window.open('about:blank', '_blank');
+
+  if (!shareWindow) {
+    setPreparingShare(false);
+    setErrorMsg(
+      'PLEASE ALLOW POPUPS FOR THIS SITE TO SHARE TO X'
+    );
+    return;
   }
+
+  try {
+    let path = result.sharePath;
+
+    // Upload the generated frame only if it hasn't
+    // already been uploaded.
+    if (!path) {
+      const id = nanoid(10);
+
+      await upload(`shares/${id}.png`, result.blob, {
+        access: 'public',
+        handleUploadUrl: '/api/upload-token',
+        addRandomSuffix: false,
+      });
+
+      path = `/s/${id}`;
+
+      setResult((r) =>
+        r ? { ...r, sharePath: path } : r
+      );
+    }
+
+    const fullShareUrl =
+      `${window.location.origin}${path}`;
+
+    const tweetUrl =
+      `https://x.com/intent/post` +
+      `?text=${encodeURIComponent(TWEET_CAPTION)}` +
+      `&url=${encodeURIComponent(fullShareUrl)}`;
+
+    // Redirect the tab that was opened immediately
+    // from the user's click.
+    shareWindow.location.href = tweetUrl;
+
+  } catch (err) {
+    console.error('Share failed:', err);
+
+    shareWindow.close();
+
+    setErrorMsg(
+      'COULD NOT PREPARE SHARE LINK — TRY AGAIN'
+    );
+  } finally {
+    setPreparingShare(false);
+  }
+}
 
   const busy = status === 'converting' || status === 'generating';
 

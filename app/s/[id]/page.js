@@ -11,17 +11,46 @@ async function getImageUrl(id) {
 
 export async function generateMetadata({ params }) {
   const imageUrl = await getImageUrl(params.id);
+
   if (!imageUrl) {
-    return { title: 'HH Goa 2026 — Frame not found' };
+    return {
+      title: 'HH Goa 2026 — Frame not found',
+      description: 'Hacker House Goa 2026',
+    };
   }
+
   return {
-    title: 'I built my HH Goa 2026 frame',
-    description: 'Hacker House Goa 2026 · Oct 28-31 · #FrameInGoa',
+    title: 'Hacker House Goa 2026',
+
+    description:
+      'Goa, code, and a little chaos 🌴💻 Just framed my Hacker House Goa 2026 moment. Less noise. More signal. #FrameInGoa',
+
     openGraph: {
-      images: [imageUrl],
+      title: 'Hacker House Goa 2026',
+
+      description:
+        'Goa, code, and a little chaos 🌴💻 Just framed my Hacker House Goa 2026 moment. Less noise. More signal. #FrameInGoa',
+
+      type: 'website',
+
+      images: [
+        {
+          url: imageUrl,
+          width: 1080,
+          height: 1080,
+          alt: 'Hacker House Goa 2026 frame',
+        },
+      ],
     },
+
     twitter: {
       card: 'summary_large_image',
+
+      title: 'Hacker House Goa 2026',
+
+      description:
+        'Goa, code, and a little chaos 🌴💻 Just framed my Hacker House Goa 2026 moment. Less noise. More signal. #FrameInGoa',
+
       images: [imageUrl],
     },
   };
