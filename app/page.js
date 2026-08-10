@@ -412,6 +412,7 @@ export default function Home() {
   const [lowResWarning, setLowResWarning] = useState(false);
   const [frameMeta, setFrameMeta] = useState(null);
   const [preparingShare, setPreparingShare] = useState(false);
+  const [tweetUrl, setTweetUrl] = useState('');
   const [adjustFile, setAdjustFile] = useState(null);
   const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
   const [photoDims, setPhotoDims] = useState(null);
@@ -438,6 +439,7 @@ export default function Home() {
     if (result?.previewUrl) URL.revokeObjectURL(result.previewUrl);
     setResult(null);
     setAdjustFile(null);
+    setTweetUrl('');
     if (adjustPreviewUrl) URL.revokeObjectURL(adjustPreviewUrl);
     setAdjustPreviewUrl(null);
     setPhotoDims(null);
@@ -575,9 +577,6 @@ export default function Home() {
     if (!result?.blob) return;
     setPreparingShare(true);
     setErrorMsg('');
-    // open blank tab synchronously so popup blockers don't fire;
-    // noopener cannot be used here — it makes window.open return null
-    const win = window.open('', '_blank');
     try {
       let path = result.sharePath;
       if (!path) {
@@ -591,10 +590,8 @@ export default function Home() {
         setResult((r) => (r ? { ...r, sharePath: path } : r));
       }
       const fullShareUrl = `${window.location.origin}${path}`;
-      const tweetUrl = `https://x.com/intent/post?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`;
-      if (win) win.location.href = tweetUrl;
+      setTweetUrl(`https://x.com/intent/post?text=${encodeURIComponent(TWEET_CAPTION)}&url=${encodeURIComponent(fullShareUrl)}`);
     } catch (err) {
-      if (win) win.close();
       setErrorMsg('COULD NOT PREPARE SHARE LINK — TRY AGAIN');
     } finally {
       setPreparingShare(false);
@@ -828,24 +825,46 @@ export default function Home() {
               >
                 ↓ DOWNLOAD
               </button>
-              <button
-                onClick={handleShare}
-                disabled={preparingShare}
-                style={{
-                  background: PINK,
-                  color: CREAM,
-                  padding: '12px 20px',
-                  borderRadius: 6,
-                  fontWeight: 700,
-                  border: 'none',
-                  letterSpacing: 1,
-                  fontSize: 13,
-                  fontFamily: 'monospace',
-                  cursor: preparingShare ? 'default' : 'pointer',
-                }}
-              >
-                {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
-              </button>
+              {!tweetUrl ? (
+                <button
+                  onClick={handleShare}
+                  disabled={preparingShare}
+                  style={{
+                    background: PINK,
+                    color: CREAM,
+                    padding: '12px 20px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    border: 'none',
+                    letterSpacing: 1,
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    cursor: preparingShare ? 'default' : 'pointer',
+                  }}
+                >
+                  {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
+                </button>
+              ) : (
+                <a
+                  href={tweetUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{
+                    background: PINK,
+                    color: CREAM,
+                    padding: '12px 20px',
+                    borderRadius: 6,
+                    fontWeight: 700,
+                    textDecoration: 'none',
+                    letterSpacing: 1,
+                    fontSize: 13,
+                    fontFamily: 'monospace',
+                    display: 'inline-block',
+                  }}
+                >
+                  OPEN X →
+                </a>
+              )}
             </div>
           </>
         )}
