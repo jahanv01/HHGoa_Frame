@@ -760,7 +760,7 @@ export default function Home() {
           </p>
         )}
 
-        {status === 'error' && (
+        {(status === 'error' || (status === 'done' && errorMsg)) && (
           <p style={{ color: PINK, maxWidth: 320, fontSize: 13, letterSpacing: 1, margin: '0 auto 16px' }}>{errorMsg}</p>
         )}
 
