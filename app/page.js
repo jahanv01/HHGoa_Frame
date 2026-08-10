@@ -79,12 +79,33 @@ async function compositeFrameLocally(photoUrl, photoDims, frameMeta, offsetX, of
   const geo = computeGeometry(photoDims, frameMeta, zoom);
   const clampedX = clamp(offsetX, -1, 1);
   const clampedY = clamp(offsetY, -1, 1);
-  const drawX = frameMeta.cx - geo.iw / 2 + clampedX * geo.maxOffsetX;
-  const drawY = frameMeta.cy - geo.ih / 2 + clampedY * geo.maxOffsetY;
+  const drawX =
+  frameMeta.cx -
+  geo.iw / 2 +
+  clampedX * geo.maxOffsetX;
 
+  const drawY =
+    frameMeta.cy -
+    geo.ih / 2 +
+    clampedY * geo.maxOffsetY;
 
+  // Draw uploaded photo first
+  ctx.drawImage(
+    photoImg,
+    drawX,
+    drawY,
+    geo.iw,
+    geo.ih
+  );
 
-  ctx.drawImage(frameImg, 0, 0, 1080, 1080);
+  // Draw frame artwork on top
+  ctx.drawImage(
+    frameImg,
+    0,
+    0,
+    1080,
+    1080
+  );
 
   const blob = await new Promise((resolve, reject) =>
     canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob failed'))), 'image/png')
