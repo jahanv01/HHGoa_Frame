@@ -155,6 +155,23 @@ function VUMeter({ active }) {
 function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, onChangeOffset, onChangeZoom, onConfirm, onCancel }) {
   const containerRef = useRef(null);
   const dragRef = useRef({ active: false });
+  // Measured from the DOM instead of assumed, since the container is
+  // `width: 100%, maxWidth: 340` — on screens narrower than 340px (very
+  // common on phones) the real rendered width is smaller, and a hardcoded
+  // 340 here would desync the photo's position from the frame overlay,
+  // which itself always scales to the container's true size via width:100%.
+  const [containerWidth, setContainerWidth] = useState(340);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w) setContainerWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     function handlePointerMove(e) {
@@ -195,7 +212,7 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
   }
 
   const geo = computeGeometry(photoDims, frameMeta, zoom);
-  const scaleFactorForRender = 340 / 1080; // matches the container's maxWidth
+  const scaleFactorForRender = containerWidth / 1080;
   const imgLeft = (frameMeta.cx - geo.iw / 2 + offsetX * geo.maxOffsetX) * scaleFactorForRender;
   const imgTop = (frameMeta.cy - geo.ih / 2 + offsetY * geo.maxOffsetY) * scaleFactorForRender;
   const imgW = geo.iw * scaleFactorForRender;
@@ -339,6 +356,17 @@ export default function Home() {
     setZoom(1);
     setErrorMsg('');
     setLowResWarning(false);
+  }
+
+  // Resets state AND immediately reopens the OS file picker, so "Choose
+  // Different" / "Change Photo" go straight to file explorer instead of
+  // landing back on the idle screen and requiring a second tap.
+  function chooseDifferentPhoto() {
+    resetToIdle();
+    if (inputRef.current) {
+      inputRef.current.value = ''; // otherwise re-picking the same file won't fire onChange
+      inputRef.current.click();
+    }
   }
 
   function handleDownload() {
@@ -575,6 +603,15 @@ export default function Home() {
           {status !== 'idle' && STATUS_TEXT[status]}
         </div>
 
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*,.heic,.heif"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+          style={{ display: 'none' }}
+          disabled={busy}
+        />
+
         {(status === 'idle' || status === 'converting') && (
           <div
             onClick={() => !busy && inputRef.current?.click()}
@@ -592,14 +629,6 @@ export default function Home() {
               background: 'rgba(6, 42, 32, 0.55)',
             }}
           >
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/*,.heic,.heif"
-              onChange={(e) => handleFile(e.target.files?.[0])}
-              style={{ display: 'none' }}
-              disabled={busy}
-            />
             {busy ? (
               <VUMeter active />
             ) : (
@@ -621,7 +650,7 @@ export default function Home() {
             onChangeOffset={(x, y) => { setOffsetX(x); setOffsetY(y); }}
             onChangeZoom={setZoom}
             onConfirm={handleConfirmAdjust}
-            onCancel={resetToIdle}
+            onCancel={chooseDifferentPhoto}
           />
         )}
 
@@ -677,7 +706,7 @@ export default function Home() {
             </div>
 
             <button
-              onClick={resetToIdle}
+              onClick={chooseDifferentPhoto}
               style={{
                 background: 'transparent',
                 color: CREAM,
