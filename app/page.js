@@ -24,11 +24,8 @@ const IDLE_MESSAGES = [
   'CATCHING THE BREEZE…',
 ];
 
-const THEMES = [
-  { id: 'radio', label: 'RADIO', desc: 'Illustrated beach + tuner' },
-  { id: 'postcard', label: 'POSTCARD', desc: 'Vintage stamp style' },
-  { id: 'map', label: 'MAP', desc: 'Treasure map style' },
-];
+const TWEET_CAPTION =
+  "Locked in at Hacker House Goa 2026 🌴💻 Building something this October. #FrameInGoa";
 
 function Confetti() {
   const colors = [CREAM, PINK, AMBER];
@@ -66,7 +63,7 @@ function Confetti() {
 function VUMeter({ active }) {
   const bars = new Array(12).fill(0);
   return (
-    <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 40, margin: '16px 0' }}>
+    <div style={{ display: 'flex', gap: 4, alignItems: 'flex-end', height: 40, margin: '16px 0', justifyContent: 'center' }}>
       {bars.map((_, i) => (
         <div
           key={i}
@@ -90,7 +87,6 @@ export default function Home() {
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [dial, setDial] = useState(0);
-  const [theme, setTheme] = useState('radio');
   const [lowResWarning, setLowResWarning] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const inputRef = useRef(null);
@@ -100,9 +96,6 @@ export default function Home() {
     return () => clearInterval(t);
   }, []);
 
-  // the image lives on a different origin (blob storage), so a plain
-  // <a download> is ignored by the browser and it navigates there instead —
-  // fetch it as a blob and save that, so the user never leaves this page
   async function handleDownload() {
     if (!result) return;
     setDownloading(true);
@@ -145,8 +138,6 @@ export default function Home() {
       }
     }
 
-    // quick client-side resolution check so the user knows *before*
-    // downloading a soft result, not after
     try {
       const dims = await new Promise((resolve, reject) => {
         const img = new Image();
@@ -156,14 +147,13 @@ export default function Home() {
       });
       if (Math.min(dims.w, dims.h) < 500) setLowResWarning(true);
     } catch {
-      // non-fatal — if we can't preflight it, just proceed
+      // non-fatal
     }
 
     setStatus('generating');
     try {
       const fd = new FormData();
       fd.append('photo', toUpload);
-      fd.append('theme', theme);
       const res = await fetch('/api/generate', { method: 'POST', body: fd });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
@@ -177,15 +167,7 @@ export default function Home() {
 
   const shareUrl =
     result && typeof window !== 'undefined' ? `${window.location.origin}${result.shareUrl}` : '';
-  const TWEET_CAPTIONS = {
-    radio: "Locked onto Hacker House Goa 2026 📡🌴 Frequency's clear, signal's strong. #FrameInGoa",
-    postcard: "Greetings from Goa — building something this October 🌊✉️ #FrameInGoa",
-    map: "Charted my course to Hacker House Goa 2026 🗺️🏝️ #FrameInGoa",
-    signal: "Tuned in for Hacker House Goa 2026. Less noise, more signal. 📻 #FrameInGoa",
-    postmark: "Just got my Hacker House Goa 2026 stamp of approval ✉️🌴 #FrameInGoa",
-    playlist: "Now playing: Hacker House Goa 2026 🎵 Build. Ship. Repeat. #FrameInGoa",
-  };
-  const tweetText = encodeURIComponent(TWEET_CAPTIONS[theme] || TWEET_CAPTIONS.radio);
+  const tweetText = encodeURIComponent(TWEET_CAPTION);
   const tweetUrl = result
     ? `https://twitter.com/intent/tweet?text=${tweetText}&url=${encodeURIComponent(shareUrl)}`
     : '';
@@ -196,7 +178,6 @@ export default function Home() {
     <>
       <style>{`
         @keyframes vu { from { height: 4px; } to { height: 36px; } }
-        @keyframes flicker { 0%,100%{opacity:1} 50%{opacity:0.96} }
         @keyframes scan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100%)} }
         @keyframes confetti-fall {
           0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
@@ -208,21 +189,36 @@ export default function Home() {
           100% { transform: scale(1); opacity: 1; }
         }
         .result-pop { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-        .console { position:relative; overflow:hidden; }
-        .console::before {
-          content:''; position:absolute; inset:0; pointer-events:none;
-          background: repeating-linear-gradient(0deg, rgba(244,236,216,0.05) 0px, rgba(244,236,216,0.05) 1px, transparent 1px, transparent 3px);
-          animation: flicker 6s infinite;
+        .bg-layer {
+          position: fixed;
+          inset: -20px;
+          background-image: url('/page-bg.png');
+          background-size: cover;
+          background-position: center;
+          background-repeat: no-repeat;
+          filter: blur(10px);
+          z-index: 0;
+        }
+        .bg-overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(6, 42, 32, 0.8);
+          z-index: 1;
         }
         .scanbeam {
-          position:absolute; left:0; right:0; height:120px; pointer-events:none;
+          position: fixed; left: 0; right: 0; top:0; height: 120px; pointer-events: none;
           background: linear-gradient(180deg, transparent, rgba(242,197,61,0.06), transparent);
           animation: scan 5s linear infinite;
+          z-index: 2;
         }
       `}</style>
+      <div className="bg-layer" />
+      <div className="bg-overlay" />
+      <div className="scanbeam" />
       <main
-        className="console"
         style={{
+          position: 'relative',
+          zIndex: 3,
           minHeight: '100vh',
           display: 'flex',
           flexDirection: 'column',
@@ -230,23 +226,20 @@ export default function Home() {
           padding: '32px 16px 64px',
           color: CREAM,
           textAlign: 'center',
-          background: GREEN,
           fontFamily: 'monospace',
         }}
       >
-        <div className="scanbeam" />
+        <div style={{ width: '100%', maxWidth: 480, margin: '0 auto' }}>
 
-        <div style={{ width: '100%', maxWidth: 480 }}>
-
-        <div style={{ fontSize: 13, letterSpacing: 2, color: AMBER, marginBottom: 4 }}>
-          BUILD · SHIP · REPEAT · EST. 2026
-        </div>
-        <h1 style={{ fontSize: 26, margin: '4px 0', letterSpacing: 1 }}>HACKER HOUSE GOA</h1>
-        <p style={{ color: PINK, margin: '0 0 4px', fontWeight: 700, letterSpacing: 3 }}>2026</p>
-        <p style={{ color: CREAM, margin: '0 0 8px', fontWeight: 700, letterSpacing: 2, fontSize: 13 }}>
+        <img
+          src="/header-logo.png"
+          alt="Hacker House Goa 2026"
+          style={{ width: '100%', maxWidth: 380, height: 'auto', margin: '0 auto 4px', display: 'block' }}
+        />
+        <p style={{ color: CREAM, margin: '0 0 8px', fontWeight: 700, letterSpacing: 3, fontSize: 15 }}>
           FRAME GENERATOR
         </p>
-        <p style={{ fontSize: 11, color: CREAM, opacity: 0.6, margin: '0 0 24px' }}>
+        <p style={{ fontSize: 11, color: CREAM, opacity: 0.7, margin: '0 0 24px' }}>
           LESS NOISE. MORE SIGNAL.
         </p>
 
@@ -260,38 +253,12 @@ export default function Home() {
             color: AMBER,
             marginBottom: 20,
             letterSpacing: 1,
+            display: 'inline-block',
           }}
         >
           {status === 'idle' && IDLE_MESSAGES[Math.floor(dial / 25) % IDLE_MESSAGES.length]}
           {status !== 'idle' && STATUS_TEXT[status]}
         </div>
-
-        {status !== 'done' && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => !busy && setTheme(t.id)}
-                disabled={busy}
-                style={{
-                  background: theme === t.id ? AMBER : 'transparent',
-                  color: theme === t.id ? GREEN : CREAM,
-                  border: `1px solid ${AMBER}`,
-                  borderRadius: 6,
-                  padding: '8px 14px',
-                  fontFamily: 'monospace',
-                  fontSize: 11,
-                  letterSpacing: 1,
-                  cursor: busy ? 'default' : 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ fontWeight: 700 }}>{t.label}</div>
-                <div style={{ opacity: 0.8, fontSize: 10 }}>{t.desc}</div>
-              </button>
-            ))}
-          </div>
-        )}
 
         {status !== 'done' && (
           <div
@@ -300,16 +267,14 @@ export default function Home() {
               width: '100%',
               maxWidth: 340,
               aspectRatio: '1',
-              border: `3px solid ${CREAM}`,
               borderRadius: '50%',
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
               cursor: busy ? 'default' : 'pointer',
-              marginBottom: 12,
-              background: GREEN_DARK,
-              boxShadow: `0 0 0 6px ${GREEN}, 0 0 0 8px ${PINK}`,
+              margin: '0 auto 12px',
+              background: 'rgba(6, 42, 32, 0.55)',
             }}
           >
             <input
@@ -337,11 +302,11 @@ export default function Home() {
         )}
 
         {status === 'error' && (
-          <p style={{ color: PINK, maxWidth: 320, fontSize: 13, letterSpacing: 1 }}>{errorMsg}</p>
+          <p style={{ color: PINK, maxWidth: 320, fontSize: 13, letterSpacing: 1, margin: '0 auto 16px' }}>{errorMsg}</p>
         )}
 
         {lowResWarning && (status === 'generating' || status === 'done') && (
-          <p style={{ color: AMBER, maxWidth: 320, fontSize: 12, letterSpacing: 0.5, marginBottom: 12 }}>
+          <p style={{ color: AMBER, maxWidth: 320, fontSize: 12, letterSpacing: 0.5, margin: '0 auto 12px' }}>
             HEADS UP: THAT PHOTO IS LOW RESOLUTION — RESULT MAY LOOK SOFT
           </p>
         )}
@@ -352,17 +317,15 @@ export default function Home() {
             <div
               className="result-pop"
               style={{
-                border: `3px solid ${AMBER}`,
-                borderRadius: 16,
-                padding: 6,
-                marginBottom: 20,
-                boxShadow: `0 0 0 4px ${GREEN_DARK}`,
+                width: '100%',
+                maxWidth: 340,
+                margin: '0 auto 20px',
               }}
             >
               <img
                 src={result.imageUrl}
                 alt="Your Hacker House Goa 2026 frame"
-                style={{ width: '100%', maxWidth: 340, borderRadius: 10, display: 'block' }}
+                style={{ width: '100%', height: 'auto', display: 'block' }}
               />
             </div>
             <VUMeter active={false} />

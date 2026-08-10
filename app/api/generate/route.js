@@ -15,7 +15,6 @@ export async function POST(req) {
 
     const form = await req.formData();
     const file = form.get('photo');
-    const theme = form.get('theme') || 'signal';
     if (!file) {
       return Response.json({ error: 'No photo uploaded' }, { status: 400 });
     }
@@ -25,7 +24,7 @@ export async function POST(req) {
 
     let pngBuffer;
     try {
-      pngBuffer = await renderFrame(photoBuffer, theme);
+      pngBuffer = await renderFrame(photoBuffer);
     } catch (err) {
       return Response.json(
         { error: 'Could not read that image. Try a JPG or PNG.' },
