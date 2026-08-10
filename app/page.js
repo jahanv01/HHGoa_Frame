@@ -575,9 +575,9 @@ export default function Home() {
     if (!result?.blob) return;
     setPreparingShare(true);
     setErrorMsg('');
-    // open the window synchronously (inside the click handler) so popup
-    // blockers don't fire — then redirect it once the upload finishes
-    const win = window.open('', '_blank', 'noopener,noreferrer');
+    // open blank tab synchronously so popup blockers don't fire;
+    // noopener cannot be used here — it makes window.open return null
+    const win = window.open('', '_blank');
     try {
       let path = result.sharePath;
       if (!path) {
