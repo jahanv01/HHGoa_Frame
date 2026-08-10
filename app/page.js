@@ -28,7 +28,7 @@ const IDLE_MESSAGES = [
 ];
 
 const TWEET_CAPTION =
-  "Goa, code, and a little chaos 🌴💻 Just framed my Hacker House Goa 2026 moment. Less noise. More signal. #FrameInGoa";
+  "Locked in at Hacker House Goa 2026 🌴💻 Building something this October. #FrameInGoa";
 
 const DEFAULT_OFFSET_Y = 0.35; // matches server's DEFAULT_Y_BIAS
 
@@ -411,7 +411,7 @@ export default function Home() {
   const [dial, setDial] = useState(0);
   const [lowResWarning, setLowResWarning] = useState(false);
   const [frameMeta, setFrameMeta] = useState(null);
-  
+  const [preparingShare, setPreparingShare] = useState(false);
 
   const [adjustFile, setAdjustFile] = useState(null);
   const [adjustPreviewUrl, setAdjustPreviewUrl] = useState(null);
@@ -557,8 +557,23 @@ export default function Home() {
   }
 
   async function handleConfirmAdjust() {
-  if (!adjustFile || !adjustPreviewUrl || !photoDims || !frameMeta) {
-    return;
+    if (!adjustFile || !adjustPreviewUrl || !photoDims || !frameMeta) return;
+    setStatus('generating');
+    try {
+      // composite entirely in the browser — no upload, no server function,
+      // no network round trip. This is the whole speed fix: the previous
+      // version's slowness came from routing this through a serverless
+      // function when the browser's own Canvas API can do it directly.
+      const blob = await compositeFrameLocally(
+        adjustPreviewUrl, photoDims, frameMeta, offsetX, offsetY, zoom
+      );
+      const previewUrl = URL.createObjectURL(blob);
+      setResult({ blob, previewUrl, sharePath: null });
+      setStatus('done');
+    } catch (err) {
+      setStatus('error');
+      setErrorMsg("COULDN'T GENERATE THE FRAME — TRY AGAIN");
+    }
   }
 
   async function handleShare() {
@@ -591,69 +606,7 @@ export default function Home() {
     }
   }
 
-  try {
-    // Generate the final frame locally
-    const blob = await compositeFrameLocally(
-      adjustPreviewUrl,
-      photoDims,
-      frameMeta,
-      offsetX,
-      offsetY,
-      zoom
-    );
-
-    // Create local preview immediately
-    const previewUrl = URL.createObjectURL(blob);
-
-    // Upload the generated frame now so the share URL
-    // already exists before the user clicks "Broadcast to X".
-    const id = nanoid(10);
-
-    await upload(`shares/${id}.png`, blob, {
-    access: 'public',
-    handleUploadUrl: '/api/upload-token',
-    });
-
-    const sharePath = `/s/${id}`;
-
-    setResult({
-      blob,
-      previewUrl,
-      sharePath,
-    });
-
-    setStatus('done');
-
-  } catch (err) {
-    console.error('Frame generation/share upload failed:', err);
-
-    setStatus('error');
-    setErrorMsg(
-      "COULDN'T GENERATE THE FRAME — TRY AGAIN"
-    );
-  }
-}
-
-  const shareUrl =
-  result?.sharePath && typeof window !== 'undefined'
-    ? `${window.location.origin}${result.sharePath}`
-    : '';
-
-  const tweetText = result?.sharePath
-    ? encodeURIComponent(
-        `${TWEET_CAPTION}\n\n${shareUrl}`
-      )
-    : '';
-
-  const tweetUrl = result?.sharePath
-    ? `https://x.com/intent/post?text=${tweetText}`
-    : '';
-
-  const busy =
-    status === 'converting' ||
-    status === 'generating';  
-
-  
+  const busy = status === 'converting' || status === 'generating';
 
   return (
     <>
@@ -880,28 +833,24 @@ export default function Home() {
               >
                 ↓ DOWNLOAD
               </button>
-              {tweetUrl && (
-                <a
-                  href={tweetUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  style={{
-                    background: PINK,
-                    color: CREAM,
-                    padding: '12px 20px',
-                    borderRadius: 6,
-                    fontWeight: 700,
-                    textDecoration: 'none',
-                    letterSpacing: 1,
-                    fontSize: 13,
-                    fontFamily: 'monospace',
-                    display: 'inline-block',
-                    cursor: 'pointer',
-                  }}
-                >
-                  BROADCAST TO X
-                </a>
-              )}
+              <button
+                onClick={handleShare}
+                disabled={preparingShare}
+                style={{
+                  background: PINK,
+                  color: CREAM,
+                  padding: '12px 20px',
+                  borderRadius: 6,
+                  fontWeight: 700,
+                  border: 'none',
+                  letterSpacing: 1,
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  cursor: preparingShare ? 'default' : 'pointer',
+                }}
+              >
+                {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
+              </button>
             </div>
           </>
         )}
