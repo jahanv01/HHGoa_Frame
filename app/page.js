@@ -838,6 +838,9 @@ export default function Home() {
                 {preparingShare ? 'PREPARING…' : 'BROADCAST TO X'}
               </button>
             </div>
+            <p style={{ color: PINK, fontWeight: 700, letterSpacing: 1, marginTop: 16 }}>
+              #FrameInGoa
+            </p>
           </>
         )}
         </div>
