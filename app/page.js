@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { upload } from '@vercel/blob/client';
 import { nanoid } from 'nanoid';
+import BeachBackground from './components/BeachBackground';
 
 const CREAM = '#f4ecd8';
 const PINK = '#e8477a';
@@ -17,6 +18,15 @@ const STATUS_TEXT = {
   generating: 'GENERATING FRAME…',
   done: 'FRAME READY',
   error: 'SOMETHING WENT WRONG',
+};
+
+const STATUS_PROGRESS = {
+  idle: 0,
+  converting: 0.3,
+  adjusting: 0.5,
+  generating: 0.75,
+  done: 1,
+  error: 0.4,
 };
 
 const IDLE_MESSAGES = [
@@ -607,9 +617,8 @@ export default function Home() {
 
   return (
     <>
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @keyframes vu { from { height: 4px; } to { height: 36px; } }
-        @keyframes scan { 0%{transform:translateY(-100%)} 100%{transform:translateY(100%)} }
         @keyframes confetti-fall {
           0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 1; }
           100% { transform: translateY(700px) translateX(var(--drift)) rotate(540deg); opacity: 0; }
@@ -620,36 +629,15 @@ export default function Home() {
           100% { transform: scale(1); opacity: 1; }
         }
         .result-pop { animation: pop-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-        .bg-layer {
-          position: fixed;
-          inset: -20px;
-          background-image: url('/page-bg.png');
-          background-size: cover;
-          background-position: center;
-          background-repeat: no-repeat;
-          filter: blur(10px);
-          z-index: 0;
-        }
-        .bg-overlay {
-          position: fixed;
-          inset: 0;
-          background: rgba(6, 42, 32, 0.8);
-          z-index: 1;
-        }
-        .scanbeam {
-          position: fixed; left: 0; right: 0; top:0; height: 120px; pointer-events: none;
-          background: linear-gradient(180deg, transparent, rgba(242,197,61,0.06), transparent);
-          animation: scan 5s linear infinite;
-          z-index: 2;
-        }
-      `}</style>
+      ` }} />
+      <BeachBackground progress={STATUS_PROGRESS[status] ?? 0} />
       <div className="bg-layer" />
       <div className="bg-overlay" />
       <div className="scanbeam" />
       <main
         style={{
           position: 'relative',
-          zIndex: 3,
+          zIndex: 10,
           minHeight: '100vh',
           display: 'flex',
           flexDirection: 'column',
@@ -668,7 +656,7 @@ export default function Home() {
           style={{ width: '100%', maxWidth: 380, height: 'auto', margin: '0 auto 4px', display: 'block' }}
         />
         <p style={{ color: CREAM, margin: '0 0 8px', fontWeight: 700, letterSpacing: 3, fontSize: 15 }}>
-          FRAME GENERATOR
+          PFP FRAME GENERATOR
         </p>
         <p style={{ fontSize: 11, color: CREAM, opacity: 0.7, margin: '0 0 24px' }}>
           LESS NOISE. MORE SIGNAL.
@@ -715,6 +703,7 @@ export default function Home() {
               cursor: busy ? 'default' : 'pointer',
               margin: '0 auto 12px',
               background: 'rgba(6, 42, 32, 0.55)',
+              border: `3px solid ${PINK}`,
             }}
           >
             {busy ? (
@@ -754,7 +743,7 @@ export default function Home() {
               JPG · PNG · HEIC · WEBP
             </p>
             <p style={{ fontSize: 11, color: AMBER, fontWeight: 700, letterSpacing: 1, margin: '0 0 16px' }}>
-              ANY SHAPE — WE'LL FRAME IT
+              ANY FORMAT — WE&apos;LL FRAME IT
             </p>
           </>
         )}
