@@ -1,4 +1,4 @@
-# HH Goa 2026 — Signal Frame
+# HH Goa 2026 — PFP Frame Generator
 
 **Team HackWave** — Jahanvi Panchal, Mansi Kotkar, Mayank Garasiya
 
