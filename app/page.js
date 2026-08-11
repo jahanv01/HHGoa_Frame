@@ -410,6 +410,9 @@ function AdjustPanel({ photoUrl, photoDims, frameMeta, offsetX, offsetY, zoom, o
           USE THIS PHOTO →
         </button>
       </div>
+      <p style={{ color: PINK, fontWeight: 700, letterSpacing: 1, marginTop: 16 }}>
+        #FrameInGoa
+      </p>
     </div>
   );
 }
